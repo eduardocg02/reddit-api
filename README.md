@@ -6,7 +6,8 @@ A FastAPI-based wrapper for the Reddit API that provides easy-to-use HTTP endpoi
 
 - 🚀 **FastAPI** - Modern, fast web framework
 - 📊 **Three Main Endpoints** - User stats, post stats, subreddit info
-- 🔐 **Secure** - Credentials passed per request (no server-side storage)
+- 🔐 **API Key Authentication** - Secure access with HTTP Basic auth
+- 🛡️ **Secure** - Credentials passed per request (no server-side storage)
 - 📝 **Auto Documentation** - Interactive API docs at `/docs`
 - ✅ **Error Handling** - Proper HTTP status codes and error messages
 
@@ -17,17 +18,55 @@ A FastAPI-based wrapper for the Reddit API that provides easy-to-use HTTP endpoi
 pip install -r requirements.txt
 ```
 
-2. Run the FastAPI server:
+2. Set your API key (optional, defaults to "your-secret-api-key-here"):
+```bash
+export API_KEY="your-secure-api-key"
+```
+
+3. Run the FastAPI server:
 ```bash
 uvicorn app:app --reload
 ```
 
 The server will start at `http://localhost:8000`
 
+## Authentication
+
+All API endpoints require authentication using HTTP Basic Auth:
+
+```bash
+Authorization: Basic {base64(api_key:)}
+```
+
+**Example with curl:**
+```bash
+curl -X POST "http://localhost:8000/get-user" \
+  -H "Authorization: Basic $(echo -n 'your-api-key:' | base64)" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "SnooCapers748", "credentials": {...}}'
+```
+
+**Example with Python:**
+```python
+import requests
+import base64
+
+api_key = "your-api-key"
+credentials = f"{api_key}:"
+encoded = base64.b64encode(credentials.encode()).decode()
+
+headers = {
+    "Authorization": f"Basic {encoded}",
+    "Content-Type": "application/json"
+}
+
+response = requests.post("http://localhost:8000/get-user", json=payload, headers=headers)
+```
+
 ## API Endpoints
 
 ### 1. Get User Statistics
-**POST** `/get-user`
+**POST** `/get-user` 🔐
 
 Get detailed statistics for a Reddit user.
 
@@ -43,7 +82,7 @@ Get detailed statistics for a Reddit user.
 ```
 
 ### 2. Get Post Statistics
-**POST** `/get-post`
+**POST** `/get-post` 🔐
 
 Get detailed information about a Reddit post.
 
@@ -59,7 +98,7 @@ Get detailed information about a Reddit post.
 ```
 
 ### 3. Get Subreddit Information
-**POST** `/get-subreddit`
+**POST** `/get-subreddit` 🔐
 
 Get detailed information about a subreddit.
 
@@ -76,20 +115,27 @@ Get detailed information about a subreddit.
 
 ## Testing
 
-1. Start the server:
+1. Set your API key:
+```bash
+export API_KEY="your-secure-api-key"
+```
+
+2. Start the server:
 ```bash
 uvicorn app:app --reload
 ```
 
-2. Run the test script:
+3. Run the authentication test script:
 ```bash
-python test_api.py
+python test_auth_example.py
 ```
 
-3. Or visit the interactive docs:
+4. Or visit the interactive docs (includes auth UI):
 ```
 http://localhost:8000/docs
 ```
+
+Note: In the interactive docs, click the "Authorize" button and enter your API key as the username (leave password empty).
 
 ## Reddit App Setup
 

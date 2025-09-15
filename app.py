@@ -14,21 +14,29 @@ Usage:
     uvicorn app:app --reload
 """
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import os
+import secrets
 from reddit_client import RedditClient, RedditAPIError
 
 # FastAPI app instance
 app = FastAPI(
     title="Reddit API Wrapper",
-    description="A FastAPI wrapper for Reddit API functionality",
+    description="A FastAPI wrapper for Reddit API functionality with API key authentication",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# Security
+security = HTTPBasic()
+
+# API Key configuration
+API_KEY = os.getenv("API_KEY", "your-secret-api-key-here")  # Set via environment variable
 
 # Add CORS middleware
 app.add_middleware(
@@ -120,6 +128,27 @@ class SubredditResponse(BaseModel):
     user_is_subscriber: Optional[bool]
     quarantine: Optional[bool]
 
+# Authentication dependency
+def verify_api_key(credentials: HTTPBasicCredentials = Depends(security)):
+    """
+    Verify API key using HTTP Basic Authentication
+    
+    The API key should be passed as the username in the Authorization header:
+    Authorization: Basic {base64(api_key:)}
+    
+    Note: The password field is ignored, you can leave it empty or use any value
+    """
+    provided_key = credentials.username
+    is_correct_key = secrets.compare_digest(provided_key, API_KEY)
+    
+    if not is_correct_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return True
+
 # Helper function to create Reddit client
 def create_reddit_client(credentials: RedditCredentials) -> RedditClient:
     """Create and return a Reddit client instance"""
@@ -136,6 +165,11 @@ async def root():
     return {
         "message": "Reddit API Wrapper",
         "version": "1.0.0",
+        "authentication": {
+            "type": "HTTP Basic",
+            "header": "Authorization: Basic {base64(api_key:)}",
+            "note": "API key goes in username field, password can be empty"
+        },
         "endpoints": {
             "get_user": "/get-user",
             "get_post": "/get-post", 
@@ -152,12 +186,15 @@ async def health_check():
 
 # User statistics endpoint
 @app.post("/get-user", response_model=UserResponse)
-async def get_user_statistics(request: UserRequest):
+async def get_user_statistics(request: UserRequest, authenticated: bool = Depends(verify_api_key)):
     """
     Get detailed statistics for a Reddit user
     
     - **username**: Reddit username (without u/ prefix)
     - **credentials**: Reddit app credentials
+    
+    Requires API key authentication via Authorization header:
+    Authorization: Basic {base64(api_key:)}
     """
     try:
         client = create_reddit_client(request.credentials)
@@ -171,12 +208,15 @@ async def get_user_statistics(request: UserRequest):
 
 # Post statistics endpoint
 @app.post("/get-post", response_model=PostResponse)
-async def get_post_statistics(request: PostRequest):
+async def get_post_statistics(request: PostRequest, authenticated: bool = Depends(verify_api_key)):
     """
     Get detailed statistics for a Reddit post
     
     - **post_url**: Full Reddit post URL
     - **credentials**: Reddit app credentials
+    
+    Requires API key authentication via Authorization header:
+    Authorization: Basic {base64(api_key:)}
     """
     try:
         client = create_reddit_client(request.credentials)
@@ -190,12 +230,15 @@ async def get_post_statistics(request: PostRequest):
 
 # Subreddit information endpoint
 @app.post("/get-subreddit", response_model=SubredditResponse)
-async def get_subreddit_info(request: SubredditRequest):
+async def get_subreddit_info(request: SubredditRequest, authenticated: bool = Depends(verify_api_key)):
     """
     Get detailed information about a subreddit
     
     - **subreddit_name**: Subreddit name (without r/ prefix)
     - **credentials**: Reddit app credentials
+    
+    Requires API key authentication via Authorization header:
+    Authorization: Basic {base64(api_key:)}
     """
     try:
         client = create_reddit_client(request.credentials)

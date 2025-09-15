@@ -21,7 +21,11 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import os
 import secrets
+from dotenv import load_dotenv
 from reddit_client import RedditClient, RedditAPIError
+
+# Load environment variables from .env file
+load_dotenv()
 
 # FastAPI app instance
 app = FastAPI(

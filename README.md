@@ -18,7 +18,15 @@ A FastAPI-based wrapper for the Reddit API that provides easy-to-use HTTP endpoi
 pip install -r requirements.txt
 ```
 
-2. Set your API key (optional, defaults to "your-secret-api-key-here"):
+2. Create a `.env` file in the project root:
+```bash
+# Create .env file
+cat > .env << EOF
+API_KEY=your-secure-api-key-here
+EOF
+```
+
+Or set via environment variable:
 ```bash
 export API_KEY="your-secure-api-key"
 ```
@@ -115,9 +123,10 @@ Get detailed information about a subreddit.
 
 ## Testing
 
-1. Set your API key:
+1. Make sure your `.env` file is configured:
 ```bash
-export API_KEY="your-secure-api-key"
+# .env file should contain:
+API_KEY=your-secure-api-key-here
 ```
 
 2. Start the server:

@@ -182,11 +182,28 @@ async def root():
         "docs": "/docs"
     }
 
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
+# Public health check endpoint (for deployment platforms)
+@app.get("/status")
+async def public_health_check():
+    """Public health check endpoint for deployment platforms"""
     return {"status": "healthy", "service": "reddit-api-wrapper"}
+
+# Authenticated health check endpoint
+@app.get("/health")
+async def health_check(authenticated: bool = Depends(verify_api_key)):
+    """
+    Authenticated health check endpoint with detailed information
+    
+    Requires API key authentication via Authorization header:
+    Authorization: Basic {base64(api_key:)}
+    """
+    return {
+        "status": "healthy", 
+        "service": "reddit-api-wrapper", 
+        "authenticated": True,
+        "api_version": "1.0.0",
+        "endpoints_available": ["get-user", "get-post", "get-subreddit"]
+    }
 
 # User statistics endpoint
 @app.post("/get-user", response_model=UserResponse)

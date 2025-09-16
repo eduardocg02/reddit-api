@@ -102,6 +102,9 @@ class PostResponse(BaseModel):
     subreddit: Optional[str]
     score: Optional[int]
     upvote_ratio: Optional[float]
+    upvotes: Optional[int]
+    downvotes: Optional[int]
+    total_votes: Optional[int]
     num_comments: Optional[int]
     created_utc: Optional[float]
     url: Optional[str]
@@ -114,6 +117,7 @@ class PostResponse(BaseModel):
     over_18: Optional[bool]
     gilded: Optional[int]
     total_awards_received: Optional[int]
+    engagement_rate: Optional[float]
 
 class SubredditResponse(BaseModel):
     name: Optional[str]

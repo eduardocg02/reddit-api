@@ -17,6 +17,9 @@ Usage:
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import os
@@ -32,8 +35,8 @@ app = FastAPI(
     title="Reddit API Wrapper",
     description="A FastAPI wrapper for Reddit API functionality with API key authentication",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url=None,  # Disable default docs
+    redoc_url=None  # Disable default redoc
 )
 
 # Security
@@ -41,6 +44,10 @@ security = HTTPBasic()
 
 # API Key configuration
 API_KEY = os.getenv("API_KEY", "your-secret-api-key-here")  # Set via environment variable
+
+# Basic Auth credentials for docs
+DOCS_USERNAME = os.getenv("DOCS_USERNAME", "admin")
+DOCS_PASSWORD = os.getenv("DOCS_PASSWORD", "password")
 
 # Add CORS middleware
 app.add_middleware(
@@ -132,7 +139,7 @@ class SubredditResponse(BaseModel):
     user_is_subscriber: Optional[bool]
     quarantine: Optional[bool]
 
-# Authentication dependency
+# Authentication dependency for API endpoints
 def verify_api_key(credentials: HTTPBasicCredentials = Depends(security)):
     """
     Verify API key using HTTP Basic Authentication
@@ -149,6 +156,25 @@ def verify_api_key(credentials: HTTPBasicCredentials = Depends(security)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return True
+
+# Authentication dependency for docs endpoints
+def verify_docs_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    """
+    Verify username and password for documentation access
+    
+    Standard HTTP Basic Authentication with username and password:
+    Authorization: Basic {base64(username:password)}
+    """
+    is_correct_username = secrets.compare_digest(credentials.username, DOCS_USERNAME)
+    is_correct_password = secrets.compare_digest(credentials.password, DOCS_PASSWORD)
+    
+    if not (is_correct_username and is_correct_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid documentation credentials",
             headers={"WWW-Authenticate": "Basic"},
         )
     return True
@@ -182,28 +208,43 @@ async def root():
         "docs": "/docs"
     }
 
-# Public health check endpoint (for deployment platforms)
-@app.get("/status")
-async def public_health_check():
-    """Public health check endpoint for deployment platforms"""
-    return {"status": "healthy", "service": "reddit-api-wrapper"}
-
-# Authenticated health check endpoint
-@app.get("/health")
-async def health_check(authenticated: bool = Depends(verify_api_key)):
+# Custom authenticated docs endpoints
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html(authenticated: bool = Depends(verify_docs_credentials)):
     """
-    Authenticated health check endpoint with detailed information
+    Custom Swagger UI docs that require username/password authentication
     
-    Requires API key authentication via Authorization header:
-    Authorization: Basic {base64(api_key:)}
+    Requires Basic Authentication with username and password:
+    Authorization: Basic {base64(username:password)}
     """
-    return {
-        "status": "healthy", 
-        "service": "reddit-api-wrapper", 
-        "authenticated": True,
-        "api_version": "1.0.0",
-        "endpoints_available": ["get-user", "get-post", "get-subreddit"]
-    }
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - Swagger UI",
+        oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
+        swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
+    )
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_html(authenticated: bool = Depends(verify_docs_credentials)):
+    """
+    Custom ReDoc documentation that requires username/password authentication
+    
+    Requires Basic Authentication with username and password:
+    Authorization: Basic {base64(username:password)}
+    """
+    from fastapi.openapi.docs import get_redoc_html
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title=app.title + " - ReDoc",
+        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js",
+    )
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "reddit-api-wrapper"}
 
 # User statistics endpoint
 @app.post("/get-user", response_model=UserResponse)
@@ -274,11 +315,17 @@ async def get_subreddit_info(request: SubredditRequest, authenticated: bool = De
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
-    return {"error": "Endpoint not found", "detail": "The requested endpoint does not exist"}
+    return JSONResponse(
+        status_code=404,
+        content={"error": "Endpoint not found", "detail": "The requested endpoint does not exist"}
+    )
 
 @app.exception_handler(422)
 async def validation_error_handler(request, exc):
-    return {"error": "Validation Error", "detail": "Invalid request format or missing required fields"}
+    return JSONResponse(
+        status_code=422,
+        content={"error": "Validation Error", "detail": "Invalid request format or missing required fields"}
+    )
 
 if __name__ == "__main__":
     import uvicorn

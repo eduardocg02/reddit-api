@@ -23,12 +23,16 @@ pip install -r requirements.txt
 # Create .env file
 cat > .env << EOF
 API_KEY=your-secure-api-key-here
+DOCS_USERNAME=admin
+DOCS_PASSWORD=your-secure-docs-password
 EOF
 ```
 
-Or set via environment variable:
+Or set via environment variables:
 ```bash
 export API_KEY="your-secure-api-key"
+export DOCS_USERNAME="admin"
+export DOCS_PASSWORD="your-secure-docs-password"
 ```
 
 3. Run the FastAPI server:
@@ -139,12 +143,12 @@ uvicorn app:app --reload
 python test_auth_example.py
 ```
 
-4. Or visit the interactive docs (includes auth UI):
+4. Or visit the interactive docs:
 ```
 http://localhost:8000/docs
 ```
 
-Note: In the interactive docs, click the "Authorize" button and enter your API key as the username (leave password empty).
+Note: The docs require separate username/password authentication. Use your DOCS_USERNAME and DOCS_PASSWORD credentials.
 
 ## Reddit App Setup
 

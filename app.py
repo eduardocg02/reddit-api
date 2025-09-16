@@ -15,7 +15,7 @@ Usage:
 """
 
 from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.security import HTTPBasic, HTTPBasicCredentials, HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
@@ -40,7 +40,8 @@ app = FastAPI(
 )
 
 # Security
-security = HTTPBasic()
+security = HTTPBasic()  # For docs authentication
+bearer_security = HTTPBearer()  # For API key authentication
 
 # API Key configuration
 API_KEY = os.getenv("API_KEY", "your-secret-api-key-here")  # Set via environment variable
@@ -144,23 +145,21 @@ class SubredditResponse(BaseModel):
     quarantine: Optional[bool]
 
 # Authentication dependency for API endpoints
-def verify_api_key(credentials: HTTPBasicCredentials = Depends(security)):
+def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(bearer_security)):
     """
-    Verify API key using HTTP Basic Authentication
+    Verify API key using Bearer Token Authentication
     
-    The API key should be passed as the username in the Authorization header:
-    Authorization: Basic {base64(api_key:)}
-    
-    Note: The password field is ignored, you can leave it empty or use any value
+    The API key should be passed as a Bearer token in the Authorization header:
+    Authorization: Bearer {api_key}
     """
-    provided_key = credentials.username
+    provided_key = credentials.credentials
     is_correct_key = secrets.compare_digest(provided_key, API_KEY)
     
     if not is_correct_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
-            headers={"WWW-Authenticate": "Basic"},
+            headers={"WWW-Authenticate": "Bearer"},
         )
     return True
 
@@ -200,9 +199,9 @@ async def root():
         "message": "Reddit API Wrapper",
         "version": "1.0.0",
         "authentication": {
-            "type": "HTTP Basic",
-            "header": "Authorization: Basic {base64(api_key:)}",
-            "note": "API key goes in username field, password can be empty"
+            "type": "Bearer Token",
+            "header": "Authorization: Bearer {api_key}",
+            "note": "Standard Bearer token authentication for API endpoints"
         },
         "endpoints": {
             "get_user": "/get-user",
@@ -260,7 +259,7 @@ async def get_user_statistics(request: UserRequest, authenticated: bool = Depend
     - **credentials**: Reddit app credentials
     
     Requires API key authentication via Authorization header:
-    Authorization: Basic {base64(api_key:)}
+    Authorization: Bearer {api_key}
     """
     try:
         client = create_reddit_client(request.credentials)
@@ -282,7 +281,7 @@ async def get_post_statistics(request: PostRequest, authenticated: bool = Depend
     - **credentials**: Reddit app credentials
     
     Requires API key authentication via Authorization header:
-    Authorization: Basic {base64(api_key:)}
+    Authorization: Bearer {api_key}
     """
     try:
         client = create_reddit_client(request.credentials)
@@ -304,7 +303,7 @@ async def get_subreddit_info(request: SubredditRequest, authenticated: bool = De
     - **credentials**: Reddit app credentials
     
     Requires API key authentication via Authorization header:
-    Authorization: Basic {base64(api_key:)}
+    Authorization: Bearer {api_key}
     """
     try:
         client = create_reddit_client(request.credentials)

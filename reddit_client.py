@@ -149,13 +149,32 @@ class RedditClient:
             else:
                 raise RedditAPIError("Unexpected response format from Reddit API")
             
+            # Calculate upvotes and downvotes from score and upvote_ratio
+            score = post_data.get('score', 0)
+            upvote_ratio = post_data.get('upvote_ratio', 0.5)
+            
+            # Calculate total votes and separate upvotes/downvotes
+            # Formula: score = upvotes - downvotes, upvote_ratio = upvotes / (upvotes + downvotes)
+            if upvote_ratio > 0 and upvote_ratio < 1:
+                total_votes = round(score / (2 * upvote_ratio - 1)) if (2 * upvote_ratio - 1) != 0 else 0
+                upvotes = round(total_votes * upvote_ratio)
+                downvotes = total_votes - upvotes
+            else:
+                # Handle edge cases
+                upvotes = max(0, score) if upvote_ratio >= 0.5 else 0
+                downvotes = max(0, -score) if upvote_ratio < 0.5 else 0
+                total_votes = upvotes + downvotes
+            
             return {
                 'id': post_data.get('id'),
                 'title': post_data.get('title'),
                 'author': post_data.get('author'),
                 'subreddit': post_data.get('subreddit'),
-                'score': post_data.get('score'),
-                'upvote_ratio': post_data.get('upvote_ratio'),
+                'score': score,
+                'upvote_ratio': upvote_ratio,
+                'upvotes': upvotes,
+                'downvotes': downvotes,
+                'total_votes': total_votes,
                 'num_comments': post_data.get('num_comments'),
                 'created_utc': post_data.get('created_utc'),
                 'url': post_data.get('url'),
@@ -168,6 +187,8 @@ class RedditClient:
                 'over_18': post_data.get('over_18'),
                 'gilded': post_data.get('gilded'),
                 'total_awards_received': post_data.get('total_awards_received'),
+                # Engagement metrics
+                'engagement_rate': round((post_data.get('num_comments', 0) / max(total_votes, 1)) * 100, 2) if total_votes > 0 else 0,
             }
             
         except Exception as e:

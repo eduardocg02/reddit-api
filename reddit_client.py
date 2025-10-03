@@ -18,8 +18,17 @@ import requests
 import base64
 import json
 import re
+import time
 from urllib.parse import urlencode, urlparse
 from typing import Optional, Dict, Any
+try:
+    from helper import calculate_post_attractiveness_score, get_attractiveness_tier, format_post
+except ImportError:
+    # Fallback if helper module is not available
+    def calculate_post_attractiveness_score(post_data, comments_data=None, include_time_factor=True):
+        return {'attractiveness_score': 0, 'score_breakdown': {}, 'engagement_metrics': {}, 'scoring_weights': {}}
+    def get_attractiveness_tier(score):
+        return {'tier': 'Unknown', 'tier_level': 0, 'description': 'Attractiveness scoring unavailable'}
 
 class RedditAPIError(Exception):
     """Custom exception for Reddit API errors"""
@@ -293,4 +302,538 @@ class RedditClient:
             if isinstance(e, RedditAPIError):
                 raise
             raise RedditAPIError(f"Error getting subreddit info: {str(e)}")
+
+    def get_subreddit_posts(self, subreddit_name: str, sort: str = "new", limit: int = 25, time_period: Optional[str] = None, after: Optional[str] = None, before: Optional[str] = None, include_attractiveness_score: bool = False) -> Dict[str, Any]:
+        """
+        Get posts from a subreddit with various sorting options
+        
+        Args:
+            subreddit_name: Subreddit name (without r/ prefix)
+            sort: Sort method ("new", "hot", "top", "rising", "controversial", "best")
+            limit: Number of posts to retrieve (1-100, default 25)
+            time_period: Time period for "top" and "controversial" sorts ("hour", "day", "week", "month", "year", "all")
+            after: Get posts after this post ID (for pagination)
+            before: Get posts before this post ID (for pagination)
+            include_attractiveness_score: Whether to calculate attractiveness scores for posts
+            
+        Returns:
+            Dictionary containing list of posts and pagination info
+        """
+        try:
+            # Clean subreddit name (remove r/ if present)
+            subreddit_name = subreddit_name.replace('r/', '').replace('/r/', '')
+            
+            # Validate limit
+            limit = max(1, min(100, limit))
+            
+            # Validate sort method
+            valid_sorts = ["new", "hot", "top", "rising", "controversial", "best"]
+            if sort not in valid_sorts:
+                raise RedditAPIError(f"Invalid sort method '{sort}'. Valid options: {', '.join(valid_sorts)}")
+            
+            # Build endpoint based on sort method
+            endpoint = f"/r/{subreddit_name}/{sort}"
+            
+            # Build parameters
+            params = {'limit': limit}
+            if after:
+                params['after'] = after
+            if before:
+                params['before'] = before
+            
+            # Add time period for top and controversial sorts
+            if sort in ["top", "controversial"] and time_period:
+                valid_periods = ["hour", "day", "week", "month", "year", "all"]
+                if time_period not in valid_periods:
+                    raise RedditAPIError(f"Invalid time period '{time_period}'. Valid options: {', '.join(valid_periods)}")
+                params['t'] = time_period
+            
+            response = self._make_authenticated_request(endpoint, params)
+            data = response.json()
+            
+            # Extract posts data
+            posts_data = data.get('data', {})
+            children = posts_data.get('children', [])
+            
+            posts = []
+            for child in children:
+                post_data = child.get('data', {})
+                
+                # Calculate upvotes and downvotes from score and upvote_ratio
+                score = post_data.get('score', 0)
+                upvote_ratio = post_data.get('upvote_ratio', 0.5)
+                
+                # Calculate total votes and separate upvotes/downvotes
+                if upvote_ratio > 0 and upvote_ratio < 1:
+                    total_votes = round(score / (2 * upvote_ratio - 1)) if (2 * upvote_ratio - 1) != 0 else 0
+                    upvotes = round(total_votes * upvote_ratio)
+                    downvotes = total_votes - upvotes
+                else:
+                    # Handle edge cases
+                    upvotes = max(0, score) if upvote_ratio >= 0.5 else 0
+                    downvotes = max(0, -score) if upvote_ratio < 0.5 else 0
+                    total_votes = upvotes + downvotes
+                
+                post_info = {
+                    'id': post_data.get('id'),
+                    'title': post_data.get('title'),
+                    'author': post_data.get('author'),
+                    'subreddit': post_data.get('subreddit'),
+                    'score': score,
+                    'upvote_ratio': upvote_ratio,
+                    'upvotes': upvotes,
+                    'downvotes': downvotes,
+                    'total_votes': total_votes,
+                    'num_comments': post_data.get('num_comments'),
+                    'created_utc': post_data.get('created_utc'),
+                    'url': post_data.get('url'),
+                    'permalink': post_data.get('permalink'),
+                    'is_self': post_data.get('is_self'),
+                    'selftext': post_data.get('selftext'),
+                    'selftext_html': post_data.get('selftext_html'),
+                    'domain': post_data.get('domain'),
+                    'locked': post_data.get('locked'),
+                    'stickied': post_data.get('stickied'),
+                    'over_18': post_data.get('over_18'),
+                    'gilded': post_data.get('gilded'),
+                    'total_awards_received': post_data.get('total_awards_received'),
+                    'thumbnail': post_data.get('thumbnail'),
+                    'preview': post_data.get('preview'),
+                    'media': post_data.get('media'),
+                    'is_video': post_data.get('is_video'),
+                    'post_hint': post_data.get('post_hint'),
+                    # Engagement metrics
+                    'engagement_rate': round((post_data.get('num_comments', 0) / max(total_votes, 1)) * 100, 2) if total_votes > 0 else 0,
+                    # Full Reddit URL
+                    'full_url': f"https://www.reddit.com{post_data.get('permalink', '')}" if post_data.get('permalink') else None,
+                }
+                
+                # Add attractiveness score if requested
+                if include_attractiveness_score:
+                    try:
+                        attractiveness_data = calculate_post_attractiveness_score(post_info)
+                        tier_data = get_attractiveness_tier(attractiveness_data['attractiveness_score'])
+                        post_info['attractiveness_analysis'] = attractiveness_data
+                        post_info['attractiveness_tier'] = tier_data
+                    except Exception as e:
+                        # Add error info for debugging
+                        post_info['attractiveness_analysis'] = {'error': str(e)}
+                        post_info['attractiveness_tier'] = {'error': str(e)}
+                posts.append(post_info)
+            
+            return {
+                'subreddit': subreddit_name,
+                'sort_method': sort,
+                'time_period': time_period,
+                'posts': posts,
+                'pagination': {
+                    'after': posts_data.get('after'),
+                    'before': posts_data.get('before'),
+                    'count': len(posts),
+                    'limit': limit
+                },
+                'total_posts_returned': len(posts)
+            }
+            
+        except Exception as e:
+            if isinstance(e, RedditAPIError):
+                raise
+            raise RedditAPIError(f"Error getting subreddit posts: {str(e)}")
+
+    def get_subreddit_new_posts(self, subreddit_name: str, limit: int = 25, after: Optional[str] = None, before: Optional[str] = None, include_attractiveness_score: bool = False) -> Dict[str, Any]:
+        """
+        Get new posts from a subreddit (backwards compatibility method)
+        
+        This method is kept for backwards compatibility. Use get_subreddit_posts() for more options.
+        """
+        return self.get_subreddit_posts(
+            subreddit_name=subreddit_name,
+            sort="new",
+            limit=limit,
+            after=after,
+            before=before,
+            include_attractiveness_score=include_attractiveness_score
+        )
+
+    def get_post_comments(self, post_url: str, limit: Optional[int] = None, sort: str = "best", depth: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get all comments for a specific Reddit post
+        
+        Args:
+            post_url: Reddit post URL (e.g., "https://www.reddit.com/r/python/comments/abc123/title/")
+            limit: Maximum number of comments to retrieve (default: no limit)
+            sort: Comment sort order ("best", "top", "new", "controversial", "old", "qa")
+            depth: Maximum depth of comment replies to retrieve (default: all levels)
+            
+        Returns:
+            Dictionary containing post info and all comments with replies
+        """
+        try:
+            post_id = self._extract_post_id_from_url(post_url)
+            
+            # Extract subreddit from URL if possible
+            subreddit_match = re.search(r'/r/([^/]+)/', post_url)
+            if subreddit_match:
+                subreddit = subreddit_match.group(1)
+                endpoint = f"/r/{subreddit}/comments/{post_id}"
+            else:
+                # Fallback to search by post ID
+                endpoint = f"/comments/{post_id}"
+            
+            # Build parameters
+            params = {'sort': sort}
+            if limit:
+                params['limit'] = limit
+            if depth is not None:
+                params['depth'] = depth
+            
+            response = self._make_authenticated_request(endpoint, params)
+            data = response.json()
+            
+            # Reddit returns an array: [post_data, comments_data]
+            if not isinstance(data, list) or len(data) < 2:
+                raise RedditAPIError("Unexpected response format from Reddit API")
+            
+            post_data = data[0]['data']['children'][0]['data']
+            comments_data = data[1]['data']['children']
+            
+            def process_comment(comment_data: Dict[str, Any], level: int = 0) -> Dict[str, Any]:
+                """Recursively process comment and its replies"""
+                if comment_data.get('kind') != 't1':  # t1 is comment type
+                    return None
+                
+                comment = comment_data.get('data', {})
+                
+                # Skip deleted/removed comments
+                if comment.get('author') in ['[deleted]', '[removed]']:
+                    return None
+                
+                # Calculate upvotes and downvotes from score and upvote_ratio
+                score = comment.get('score', 0)
+                upvote_ratio = comment.get('upvote_ratio')
+                
+                if upvote_ratio and upvote_ratio > 0 and upvote_ratio < 1:
+                    total_votes = round(score / (2 * upvote_ratio - 1)) if (2 * upvote_ratio - 1) != 0 else 0
+                    upvotes = round(total_votes * upvote_ratio)
+                    downvotes = total_votes - upvotes
+                else:
+                    # For comments, upvote_ratio might not be available
+                    upvotes = max(0, score) if score >= 0 else 0
+                    downvotes = max(0, -score) if score < 0 else 0
+                    total_votes = upvotes + downvotes
+                
+                # Process replies
+                replies = []
+                replies_data = comment.get('replies')
+                if replies_data and isinstance(replies_data, dict):
+                    replies_children = replies_data.get('data', {}).get('children', [])
+                    for reply_data in replies_children:
+                        processed_reply = process_comment(reply_data, level + 1)
+                        if processed_reply:
+                            replies.append(processed_reply)
+                
+                return {
+                    'id': comment.get('id'),
+                    'author': comment.get('author'),
+                    'body': comment.get('body'),
+                    'body_html': comment.get('body_html'),
+                    'score': score,
+                    'upvote_ratio': upvote_ratio,
+                    'upvotes': upvotes,
+                    'downvotes': downvotes,
+                    'total_votes': total_votes,
+                    'created_utc': comment.get('created_utc'),
+                    'edited': comment.get('edited'),
+                    'gilded': comment.get('gilded'),
+                    'total_awards_received': comment.get('total_awards_received'),
+                    'permalink': comment.get('permalink'),
+                    'parent_id': comment.get('parent_id'),
+                    'link_id': comment.get('link_id'),
+                    'subreddit': comment.get('subreddit'),
+                    'is_submitter': comment.get('is_submitter'),
+                    'stickied': comment.get('stickied'),
+                    'locked': comment.get('locked'),
+                    'controversiality': comment.get('controversiality'),
+                    'depth': level,
+                    'replies_count': len(replies),
+                    'replies': replies,
+                    'full_url': f"https://www.reddit.com{comment.get('permalink', '')}" if comment.get('permalink') else None,
+                }
+            
+            # Process all top-level comments
+            comments = []
+            for comment_data in comments_data:
+                processed_comment = process_comment(comment_data)
+                if processed_comment:
+                    comments.append(processed_comment)
+            
+            # Get post basic info
+            post_info = {
+                'id': post_data.get('id'),
+                'title': post_data.get('title'),
+                'author': post_data.get('author'),
+                'subreddit': post_data.get('subreddit'),
+                'score': post_data.get('score'),
+                'num_comments': post_data.get('num_comments'),
+                'created_utc': post_data.get('created_utc'),
+                'url': post_data.get('url'),
+                'permalink': post_data.get('permalink'),
+                'full_url': f"https://www.reddit.com{post_data.get('permalink', '')}" if post_data.get('permalink') else None,
+            }
+            
+            def count_total_comments(comments_list):
+                """Recursively count all comments including replies"""
+                total = len(comments_list)
+                for comment in comments_list:
+                    total += count_total_comments(comment.get('replies', []))
+                return total
+            
+            return {
+                'post': post_info,
+                'comments': comments,
+                'total_comments_retrieved': count_total_comments(comments),
+                'sort_order': sort,
+                'parameters': {
+                    'limit': limit,
+                    'depth': depth,
+                    'sort': sort
+                }
+            }
+            
+        except Exception as e:
+            if isinstance(e, RedditAPIError):
+                raise
+            raise RedditAPIError(f"Error getting post comments: {str(e)}")
+    
+    def get_formatted_post_analysis(self, post_url: str, include_attractiveness: bool = True) -> Dict[str, Any]:
+        """
+        Get a complete formatted analysis of a Reddit post including comments and attractiveness scoring
+        
+        Args:
+            post_url: Reddit post URL
+            include_attractiveness: Whether to include attractiveness analysis
+            
+        Returns:
+            Dictionary containing post data, comments, attractiveness analysis, and formatted markdown
+        """
+        try:
+            # Get post comments using existing method (no limit to get ALL comments)
+            post_comments_data = self.get_post_comments(post_url, limit=None, depth=None)
+            
+            if not post_comments_data or 'post' not in post_comments_data:
+                raise RedditAPIError("Failed to fetch post data")
+            
+            post_data = post_comments_data['post']
+            comments_data = post_comments_data.get('comments', [])
+            
+            # Calculate attractiveness analysis if requested
+            attractiveness_analysis = None
+            if include_attractiveness:
+                try:
+                    attractiveness_analysis = calculate_post_attractiveness_score(
+                        post_data, 
+                        comments_data, 
+                        include_time_factor=True
+                    )
+                    # Add tier information
+                    tier_info = get_attractiveness_tier(attractiveness_analysis['attractiveness_score'])
+                    attractiveness_analysis['tier'] = tier_info
+                except Exception as e:
+                    print(f"Warning: Could not calculate attractiveness score: {e}")
+                    attractiveness_analysis = None
+            
+            # Generate formatted markdown
+            try:
+                formatted_post = format_post(post_data, comments_data, attractiveness_analysis)
+            except Exception as e:
+                print(f"Warning: Could not format post: {e}")
+                formatted_post = "Error generating formatted output"
+            
+            # Calculate basic metrics
+            total_comments = len(comments_data)
+            total_comment_score = sum(comment.get('score', 0) for comment in self._flatten_comments(comments_data))
+            
+            return {
+                'success': True,
+                'post_data': post_data,
+                'comments_data': comments_data,
+                'attractiveness_analysis': attractiveness_analysis,
+                'formatted_post': formatted_post,
+                'basic_metrics': {
+                    'total_comments': total_comments,
+                    'total_comment_score': total_comment_score,
+                    'post_score': post_data.get('score', 0),
+                    'engagement_rate': post_data.get('upvote_ratio', 0),
+                    'has_media': bool(post_data.get('url', '').lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')))
+                },
+                'analysis_timestamp': time.time()
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'post_data': None,
+                'comments_data': [],
+                'attractiveness_analysis': None,
+                'formatted_post': None,
+                'basic_metrics': {},
+                'analysis_timestamp': time.time()
+            }
+    
+    def _flatten_comments(self, comments: list) -> list:
+        """Flatten nested comments structure for metrics calculation"""
+        flattened = []
+        for comment in comments:
+            flattened.append(comment)
+            if comment.get('replies'):
+                flattened.extend(self._flatten_comments(comment['replies']))
+        return flattened
+    
+    def get_full_subreddit_posts(self, subreddit_name: str, sort: str = "hot", 
+                                time_period: Optional[str] = None, limit: int = 25,
+                                after: Optional[str] = None, before: Optional[str] = None,
+                                include_comments: bool = True, sort_by_attractiveness: bool = True) -> Dict[str, Any]:
+        """
+        Get comprehensive analysis of subreddit posts with attractiveness scoring and formatted output
+        
+        Args:
+            subreddit_name: Name of the subreddit (without r/ prefix)
+            sort: Sort method (hot, new, top, rising, controversial, best)
+            time_period: Time period for top/controversial sorts
+            limit: Maximum number of posts to fetch
+            after: Pagination - get posts after this ID
+            before: Pagination - get posts before this ID
+            include_comments: Whether to fetch comments for each post
+            sort_by_attractiveness: Whether to sort results by attractiveness score
+            
+        Returns:
+            Dictionary containing comprehensive analysis of all posts
+        """
+        try:
+            # First, get the list of posts from the subreddit
+            posts_response = self.get_subreddit_posts(
+                subreddit_name=subreddit_name,
+                sort=sort,
+                time_period=time_period,
+                limit=limit,
+                after=after,
+                before=before,
+                include_attractiveness_score=True
+            )
+            
+            if not posts_response or 'posts' not in posts_response:
+                raise RedditAPIError("Failed to fetch subreddit posts")
+            
+            posts = posts_response['posts']
+            analyzed_posts = []
+            
+            print(f"Analyzing {len(posts)} posts from r/{subreddit_name}...")
+            
+            # Analyze each post individually
+            for i, post in enumerate(posts, 1):
+                try:
+                    print(f"Processing post {i}/{len(posts)}: {post.get('title', 'No title')[:50]}...")
+                    
+                    # Get post URL for detailed analysis
+                    post_url = f"https://www.reddit.com{post.get('permalink', '')}"
+                    
+                    if include_comments:
+                        # Get full analysis including comments
+                        analysis = self.get_formatted_post_analysis(post_url, include_attractiveness=True)
+                        
+                        if analysis['success']:
+                            analyzed_posts.append({
+                                'post_data': analysis['post_data'],
+                                'comments_data': analysis['comments_data'],
+                                'attractiveness_analysis': analysis['attractiveness_analysis'],
+                                'formatted_post': analysis['formatted_post'],
+                                'basic_metrics': analysis['basic_metrics']
+                            })
+                        else:
+                            print(f"Warning: Failed to analyze post {i}: {analysis.get('error', 'Unknown error')}")
+                    else:
+                        # Just get post data with attractiveness scoring
+                        attractiveness_analysis = None
+                        try:
+                            attractiveness_analysis = calculate_post_attractiveness_score(
+                                post, [], include_time_factor=True
+                            )
+                            tier_info = get_attractiveness_tier(attractiveness_analysis['attractiveness_score'])
+                            attractiveness_analysis['tier'] = tier_info
+                        except Exception as e:
+                            print(f"Warning: Could not calculate attractiveness for post {i}: {e}")
+                        
+                        # Generate formatted output without comments
+                        formatted_post = format_post(post, [], attractiveness_analysis)
+                        
+                        analyzed_posts.append({
+                            'post_data': post,
+                            'comments_data': [],
+                            'attractiveness_analysis': attractiveness_analysis,
+                            'formatted_post': formatted_post,
+                            'basic_metrics': {
+                                'total_comments': post.get('num_comments', 0),
+                                'total_comment_score': 0,
+                                'post_score': post.get('score', 0),
+                                'engagement_rate': post.get('upvote_ratio', 0),
+                                'has_media': bool(post.get('url', '').lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')))
+                            }
+                        })
+                        
+                except Exception as e:
+                    print(f"Error processing post {i}: {e}")
+                    continue
+            
+            # Sort by attractiveness score if requested
+            if sort_by_attractiveness and analyzed_posts:
+                analyzed_posts.sort(
+                    key=lambda x: x['attractiveness_analysis']['attractiveness_score'] if x['attractiveness_analysis'] else 0,
+                    reverse=True
+                )
+            
+            # Calculate summary metrics
+            total_posts = len(analyzed_posts)
+            attractiveness_scores = [
+                p['attractiveness_analysis']['attractiveness_score'] 
+                for p in analyzed_posts 
+                if p['attractiveness_analysis']
+            ]
+            
+            summary_metrics = {
+                'total_posts_analyzed': total_posts,
+                'average_attractiveness_score': sum(attractiveness_scores) / len(attractiveness_scores) if attractiveness_scores else 0,
+                'max_attractiveness_score': max(attractiveness_scores) if attractiveness_scores else 0,
+                'min_attractiveness_score': min(attractiveness_scores) if attractiveness_scores else 0,
+                'total_post_score': sum(p['basic_metrics']['post_score'] for p in analyzed_posts),
+                'average_post_score': sum(p['basic_metrics']['post_score'] for p in analyzed_posts) / total_posts if total_posts > 0 else 0,
+                'total_comments': sum(p['basic_metrics']['total_comments'] for p in analyzed_posts),
+                'average_comments_per_post': sum(p['basic_metrics']['total_comments'] for p in analyzed_posts) / total_posts if total_posts > 0 else 0,
+                'posts_with_media': sum(1 for p in analyzed_posts if p['basic_metrics']['has_media']),
+                'media_percentage': (sum(1 for p in analyzed_posts if p['basic_metrics']['has_media']) / total_posts * 100) if total_posts > 0 else 0
+            }
+            
+            return {
+                'success': True,
+                'subreddit': subreddit_name,
+                'sort_method': sort,
+                'time_period': time_period,
+                'total_posts_fetched': total_posts,
+                'posts_analyzed': analyzed_posts,
+                'summary_metrics': summary_metrics,
+                'analysis_timestamp': time.time()
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'subreddit': subreddit_name,
+                'sort_method': sort,
+                'time_period': time_period,
+                'total_posts_fetched': 0,
+                'posts_analyzed': [],
+                'summary_metrics': {},
+                'analysis_timestamp': time.time(),
+                'error': str(e)
+            }
     

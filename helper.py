@@ -274,6 +274,54 @@ def analyze_sample_post():
     for component, value in result['score_breakdown'].items():
         print(f"  {component}: {value}")
 
+def calculate_thread_engagement(comment: Dict[str, Any]) -> int:
+    """
+    Calculate total upvotes/engagement for a comment thread (including all replies)
+    
+    Args:
+        comment: Root comment of the thread
+        
+    Returns:
+        Total score/upvotes for the entire thread
+    """
+    total_score = comment.get('score', 0)
+    
+    # Add scores from all replies recursively
+    replies = comment.get('replies', [])
+    for reply in replies:
+        total_score += calculate_thread_engagement(reply)
+    
+    return total_score
+
+def get_top_comment_threads(comments_data: List[Dict[str, Any]], max_threads: int = 10) -> List[Dict[str, Any]]:
+    """
+    Get the top comment threads sorted by total engagement (upvotes)
+    
+    Args:
+        comments_data: List of root-level comments
+        max_threads: Maximum number of threads to return
+        
+    Returns:
+        List of top comment threads sorted by engagement
+    """
+    if not comments_data:
+        return []
+    
+    # Calculate engagement for each thread and sort
+    threads_with_engagement = []
+    for comment in comments_data:
+        engagement = calculate_thread_engagement(comment)
+        threads_with_engagement.append({
+            'comment': comment,
+            'total_engagement': engagement
+        })
+    
+    # Sort by engagement (highest first) and take top N
+    threads_with_engagement.sort(key=lambda x: x['total_engagement'], reverse=True)
+    top_threads = threads_with_engagement[:max_threads]
+    
+    return [thread['comment'] for thread in top_threads]
+
 def format_post(post_data: Dict[str, Any], comments_data: List[Dict[str, Any]], 
                 attractiveness_analysis: Optional[Dict[str, Any]] = None) -> str:
     """
@@ -479,27 +527,31 @@ def format_post(post_data: Dict[str, Any], comments_data: List[Dict[str, Any]],
         
         output.append("")
     
-    # Comments Section
-    output.append("## 💬 Comments Thread")
+    # Comments Section - Show Top 10 Most Engaging Threads
+    output.append("## 💬 Top Comment Threads")
     output.append("")
     
     if not comments_data:
         output.append("*No comments available*")
     else:
-        # Count ALL comments including nested replies
+        # Get top comment threads by engagement
+        top_threads = get_top_comment_threads(comments_data, max_threads=10)
         total_comments = count_all_comments(comments_data)
+        
         output.append(f"**Total Comments:** {total_comments:,} (including all replies)")
         output.append(f"**Top-level Comments:** {len(comments_data)}")
+        output.append(f"**Showing Top {len(top_threads)} Most Engaging Threads**")
         output.append("")
         
-        # Format each top-level comment and its replies
-        for i, comment in enumerate(comments_data, 1):
-            output.append(f"### Comment #{i}")
+        # Format each top thread with engagement score
+        for i, comment in enumerate(top_threads, 1):
+            thread_engagement = calculate_thread_engagement(comment)
+            output.append(f"### Thread #{i} (Total Engagement: {thread_engagement:+d} points)")
             output.append("")
             output.append(format_comment_thread(comment))
             
-            # Add separator between comments (except for the last one)
-            if i < len(comments_data):
+            # Add separator between threads (except for the last one)
+            if i < len(top_threads):
                 output.append("---")
                 output.append("")
     

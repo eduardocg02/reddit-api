@@ -492,6 +492,7 @@ class RedditClient:
             
             response = self._make_authenticated_request(endpoint, params)
             data = response.json()
+            print(f"  API Response type: {type(data)}, length: {len(data) if isinstance(data, list) else 'N/A'}")
             
             # Reddit returns an array: [post_data, comments_data]
             if not isinstance(data, list) or len(data) < 2:
@@ -623,6 +624,9 @@ class RedditClient:
             # Get post comments using existing method (no limit to get ALL comments)
             print(f"  Fetching comments for: {post_url}")
             post_comments_data = self.get_post_comments(post_url, limit=None, depth=None)
+            print(f"  Raw post_comments_data keys: {list(post_comments_data.keys()) if post_comments_data else 'None'}")
+            if post_comments_data and 'comments' in post_comments_data:
+                print(f"  Comments found: {len(post_comments_data['comments'])}")
             
             if not post_comments_data or 'post' not in post_comments_data:
                 print(f"  ERROR: Failed to fetch post data for {post_url}")
@@ -772,6 +776,7 @@ class RedditClient:
                             
                             analyzed_posts.append({
                                 'post_data': simplified_post_data,
+                                'comments_data': analysis['comments_data'],
                                 'attractiveness_analysis': analysis['attractiveness_analysis'],
                                 'basic_metrics': analysis['basic_metrics'],
                                 'formatted_post': analysis['formatted_post']

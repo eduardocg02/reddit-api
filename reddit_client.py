@@ -482,7 +482,10 @@ class RedditClient:
             
             # Build parameters
             params = {'sort': sort}
-            if limit:
+            # When limit is None, we want ALL comments, so set a very high limit
+            if limit is None:
+                params['limit'] = 1000  # Reddit's practical maximum
+            elif limit is not None:
                 params['limit'] = limit
             if depth is not None:
                 params['depth'] = depth

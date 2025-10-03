@@ -21,7 +21,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 import os
 import secrets
 from dotenv import load_dotenv
@@ -235,7 +235,7 @@ class CommentInfo(BaseModel):
     downvotes: Optional[int]
     total_votes: Optional[int]
     created_utc: Optional[float]
-    edited: Optional[bool]
+    edited: Optional[Union[bool, float]]  # Can be False or timestamp
     gilded: Optional[int]
     total_awards_received: Optional[int]
     permalink: Optional[str]

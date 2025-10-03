@@ -504,13 +504,27 @@ class RedditClient:
             score = post_data.get('score', 0)
             upvote_ratio = post_data.get('upvote_ratio', 0.5)
             
-            # Calculate total votes and separate upvotes/downvotes
-            if upvote_ratio > 0 and upvote_ratio < 1:
+            # Handle case where upvote_ratio is 0 or None (Reddit API sometimes returns 0)
+            if upvote_ratio == 0 or upvote_ratio is None:
+                # For highly upvoted posts, Reddit sometimes returns 0 for upvote_ratio
+                # Assume it's a highly upvoted post if score is positive
+                if score > 0:
+                    upvote_ratio = 1.0  # Assume 100% upvoted
+                    upvotes = score
+                    downvotes = 0
+                    total_votes = score
+                else:
+                    upvote_ratio = 0.5
+                    upvotes = max(0, score)
+                    downvotes = max(0, -score)
+                    total_votes = upvotes + downvotes
+            elif upvote_ratio > 0 and upvote_ratio < 1:
+                # Normal calculation
                 total_votes = round(score / (2 * upvote_ratio - 1)) if (2 * upvote_ratio - 1) != 0 else 0
                 upvotes = round(total_votes * upvote_ratio)
                 downvotes = total_votes - upvotes
             else:
-                # Handle edge cases
+                # Handle other edge cases
                 upvotes = max(0, score) if upvote_ratio >= 0.5 else 0
                 downvotes = max(0, -score) if upvote_ratio < 0.5 else 0
                 total_votes = upvotes + downvotes

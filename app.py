@@ -286,7 +286,7 @@ class FormattedPostAnalysisResponse(BaseModel):
     error: Optional[str] = None
 
 class FullPostAnalysis(BaseModel):
-    post_data: PostInfo
+    post_data: Dict[str, Any]  # Use flexible dict instead of strict PostInfo
     comments_data: Optional[list[CommentInfo]] = None
     attractiveness_analysis: Optional[Dict[str, Any]] = None
     formatted_post: str

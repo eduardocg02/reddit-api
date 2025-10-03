@@ -499,6 +499,31 @@ class RedditClient:
                 raise RedditAPIError("Unexpected response format from Reddit API")
             
             post_data = data[0]['data']['children'][0]['data']
+            
+            # Calculate upvotes and downvotes from score and upvote_ratio (same as get_subreddit_posts)
+            score = post_data.get('score', 0)
+            upvote_ratio = post_data.get('upvote_ratio', 0.5)
+            
+            # Calculate total votes and separate upvotes/downvotes
+            if upvote_ratio > 0 and upvote_ratio < 1:
+                total_votes = round(score / (2 * upvote_ratio - 1)) if (2 * upvote_ratio - 1) != 0 else 0
+                upvotes = round(total_votes * upvote_ratio)
+                downvotes = total_votes - upvotes
+            else:
+                # Handle edge cases
+                upvotes = max(0, score) if upvote_ratio >= 0.5 else 0
+                downvotes = max(0, -score) if upvote_ratio < 0.5 else 0
+                total_votes = upvotes + downvotes
+            
+            # Add calculated fields to post_data
+            post_data.update({
+                'upvotes': upvotes,
+                'downvotes': downvotes,
+                'total_votes': total_votes,
+                'engagement_rate': upvote_ratio,
+                'full_url': f"https://www.reddit.com{post_data.get('permalink', '')}"
+            })
+            
             comments_data = data[1]['data']['children']
             
             def process_comment(comment_data: Dict[str, Any], level: int = 0) -> Dict[str, Any]:

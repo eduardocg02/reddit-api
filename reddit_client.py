@@ -751,19 +751,49 @@ class RedditClient:
                             expected_comments = post.get('num_comments', 0)
                             print(f"  Comments fetched: {comments_count}, Expected: {expected_comments}")
                             
+                            # Create simplified post data for response
+                            simplified_post_data = {
+                                'title': analysis['post_data'].get('title', ''),
+                                'author': analysis['post_data'].get('author', ''),
+                                'score': analysis['post_data'].get('score', 0),
+                                'upvote_ratio': analysis['post_data'].get('upvote_ratio', 0),
+                                'num_comments': analysis['post_data'].get('num_comments', 0),
+                                'created_utc': analysis['post_data'].get('created_utc', 0),
+                                'url': analysis['post_data'].get('url', ''),
+                                'permalink': analysis['post_data'].get('permalink', ''),
+                                'selftext': analysis['post_data'].get('selftext', ''),
+                                'is_video': analysis['post_data'].get('is_video', False),
+                                'media': analysis['post_data'].get('media'),
+                                'preview': analysis['post_data'].get('preview')
+                            }
+                            
                             analyzed_posts.append({
-                                'post_data': analysis['post_data'],
-                                'comments_data': analysis['comments_data'],
+                                'post_data': simplified_post_data,
                                 'attractiveness_analysis': analysis['attractiveness_analysis'],
-                                'formatted_post': analysis['formatted_post'],
-                                'basic_metrics': analysis['basic_metrics']
+                                'basic_metrics': analysis['basic_metrics'],
+                                'formatted_post': analysis['formatted_post']
                             })
                         else:
                             print(f"Warning: Failed to analyze post {i}: {analysis.get('error', 'Unknown error')}")
                             # Still add the post but without full analysis
+                            # Create simplified post data for response
+                            simplified_post_data = {
+                                'title': post.get('title', ''),
+                                'author': post.get('author', ''),
+                                'score': post.get('score', 0),
+                                'upvote_ratio': post.get('upvote_ratio', 0),
+                                'num_comments': post.get('num_comments', 0),
+                                'created_utc': post.get('created_utc', 0),
+                                'url': post.get('url', ''),
+                                'permalink': post.get('permalink', ''),
+                                'selftext': post.get('selftext', ''),
+                                'is_video': post.get('is_video', False),
+                                'media': post.get('media'),
+                                'preview': post.get('preview')
+                            }
+                            
                             analyzed_posts.append({
-                                'post_data': post,
-                                'comments_data': [],
+                                'post_data': simplified_post_data,
                                 'attractiveness_analysis': None,
                                 'formatted_post': f"Error analyzing post: {analysis.get('error', 'Unknown error')}",
                                 'basic_metrics': {
@@ -789,9 +819,24 @@ class RedditClient:
                         # Generate formatted output without comments
                         formatted_post = format_post(post, [], attractiveness_analysis)
                         
+                        # Create simplified post data for response
+                        simplified_post_data = {
+                            'title': post.get('title', ''),
+                            'author': post.get('author', ''),
+                            'score': post.get('score', 0),
+                            'upvote_ratio': post.get('upvote_ratio', 0),
+                            'num_comments': post.get('num_comments', 0),
+                            'created_utc': post.get('created_utc', 0),
+                            'url': post.get('url', ''),
+                            'permalink': post.get('permalink', ''),
+                            'selftext': post.get('selftext', ''),
+                            'is_video': post.get('is_video', False),
+                            'media': post.get('media'),
+                            'preview': post.get('preview')
+                        }
+                        
                         analyzed_posts.append({
-                            'post_data': post,
-                            'comments_data': [],
+                            'post_data': simplified_post_data,
                             'attractiveness_analysis': attractiveness_analysis,
                             'formatted_post': formatted_post,
                             'basic_metrics': {

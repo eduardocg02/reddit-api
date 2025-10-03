@@ -317,9 +317,7 @@ def format_post(post_data: Dict[str, Any], comments_data: List[Dict[str, Any]],
         text = re.sub(r'[ \t]+', ' ', text)  # Multiple spaces to single
         text = text.strip()
         
-        # Truncate if extremely long
-        if len(text) > 2000:
-            text = text[:1997] + "..."
+        # NO TRUNCATION - return full text always
             
         return text
     

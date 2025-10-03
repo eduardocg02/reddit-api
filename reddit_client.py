@@ -618,9 +618,12 @@ class RedditClient:
         """
         try:
             # Get post comments using existing method (no limit to get ALL comments)
+            print(f"  Fetching comments for: {post_url}")
             post_comments_data = self.get_post_comments(post_url, limit=None, depth=None)
             
             if not post_comments_data or 'post' not in post_comments_data:
+                print(f"  ERROR: Failed to fetch post data for {post_url}")
+                print(f"  Response: {post_comments_data}")
                 raise RedditAPIError("Failed to fetch post data")
             
             post_data = post_comments_data['post']
@@ -743,6 +746,11 @@ class RedditClient:
                         analysis = self.get_formatted_post_analysis(post_url, include_attractiveness=True)
                         
                         if analysis['success']:
+                            # Debug: Check if comments were actually fetched
+                            comments_count = len(analysis['comments_data']) if analysis['comments_data'] else 0
+                            expected_comments = post.get('num_comments', 0)
+                            print(f"  Comments fetched: {comments_count}, Expected: {expected_comments}")
+                            
                             analyzed_posts.append({
                                 'post_data': analysis['post_data'],
                                 'comments_data': analysis['comments_data'],
@@ -752,6 +760,20 @@ class RedditClient:
                             })
                         else:
                             print(f"Warning: Failed to analyze post {i}: {analysis.get('error', 'Unknown error')}")
+                            # Still add the post but without full analysis
+                            analyzed_posts.append({
+                                'post_data': post,
+                                'comments_data': [],
+                                'attractiveness_analysis': None,
+                                'formatted_post': f"Error analyzing post: {analysis.get('error', 'Unknown error')}",
+                                'basic_metrics': {
+                                    'total_comments': post.get('num_comments', 0),
+                                    'total_comment_score': 0,
+                                    'post_score': post.get('score', 0),
+                                    'engagement_rate': post.get('upvote_ratio', 0),
+                                    'has_media': bool(post.get('url', '').lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')))
+                                }
+                            })
                     else:
                         # Just get post data with attractiveness scoring
                         attractiveness_analysis = None

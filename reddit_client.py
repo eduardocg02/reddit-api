@@ -951,3 +951,280 @@ class RedditClient:
                 'error': str(e)
             }
     
+    def get_user_profile_research(self, username: str, limit: int = 100) -> Dict[str, Any]:
+        """
+        Get comprehensive profile research data for a Reddit user
+        
+        Args:
+            username: Reddit username (without u/ prefix)
+            limit: Maximum number of posts/comments to analyze (default 100)
+            
+        Returns:
+            Dictionary containing comprehensive user profile analysis
+        """
+        try:
+            # Clean username (remove u/ if present)
+            username = username.replace('u/', '').replace('/u/', '')
+            
+            # Validate limit
+            limit = max(1, min(1000, limit))
+            
+            print(f"Analyzing user profile for: {username}")
+            
+            # Get user's basic info first
+            user_info = self.get_user_statistics(username)
+            
+            # Fetch user's recent posts
+            posts_endpoint = f"/user/{username}/submitted"
+            posts_response = self._make_authenticated_request(posts_endpoint, {'limit': limit})
+            posts_data = posts_response.json()
+            
+            # Fetch user's recent comments
+            comments_endpoint = f"/user/{username}/comments"
+            comments_response = self._make_authenticated_request(comments_endpoint, {'limit': limit})
+            comments_data = comments_response.json()
+            
+            # Extract posts and comments data
+            posts = []
+            if posts_data.get('data', {}).get('children'):
+                for child in posts_data['data']['children']:
+                    if child.get('kind') == 't3':  # t3 is post type
+                        post_data = child.get('data', {})
+                        posts.append({
+                            'id': post_data.get('id'),
+                            'title': post_data.get('title'),
+                            'subreddit': post_data.get('subreddit'),
+                            'score': post_data.get('score', 0),
+                            'upvote_ratio': post_data.get('upvote_ratio', 0),
+                            'num_comments': post_data.get('num_comments', 0),
+                            'created_utc': post_data.get('created_utc'),
+                            'url': post_data.get('url'),
+                            'selftext': post_data.get('selftext', ''),
+                            'is_self': post_data.get('is_self'),
+                            'domain': post_data.get('domain'),
+                            'post_hint': post_data.get('post_hint'),
+                            'is_video': post_data.get('is_video', False),
+                            'over_18': post_data.get('over_18', False),
+                            'stickied': post_data.get('stickied', False),
+                            'locked': post_data.get('locked', False),
+                            'gilded': post_data.get('gilded', 0),
+                            'total_awards_received': post_data.get('total_awards_received', 0)
+                        })
+            
+            comments = []
+            if comments_data.get('data', {}).get('children'):
+                for child in comments_data['data']['children']:
+                    if child.get('kind') == 't1':  # t1 is comment type
+                        comment_data = child.get('data', {})
+                        comments.append({
+                            'id': comment_data.get('id'),
+                            'body': comment_data.get('body', ''),
+                            'subreddit': comment_data.get('subreddit'),
+                            'score': comment_data.get('score', 0),
+                            'created_utc': comment_data.get('created_utc'),
+                            'parent_id': comment_data.get('parent_id'),
+                            'link_id': comment_data.get('link_id'),
+                            'is_submitter': comment_data.get('is_submitter', False),
+                            'stickied': comment_data.get('stickied', False),
+                            'gilded': comment_data.get('gilded', 0),
+                            'total_awards_received': comment_data.get('total_awards_received', 0),
+                            'controversiality': comment_data.get('controversiality', 0)
+                        })
+            
+            # Analyze the collected data using helper functions (with fallback if not available)
+            try:
+                from helper import (
+                    analyze_user_posting_patterns, 
+                    calculate_user_engagement_metrics,
+                    analyze_content_topics,
+                    identify_network_connections
+                )
+                
+                # Perform comprehensive analysis
+                posting_patterns = analyze_user_posting_patterns(posts, comments)
+                engagement_metrics = calculate_user_engagement_metrics(posts, comments)
+                content_analysis = analyze_content_topics(posts, comments)
+                network_analysis = identify_network_connections(posts, comments)
+            except ImportError:
+                # Fallback basic analysis if helper functions not available yet
+                posting_patterns = self._basic_posting_patterns_analysis(posts, comments)
+                engagement_metrics = self._basic_engagement_metrics(posts, comments)
+                content_analysis = self._basic_content_analysis(posts, comments)
+                network_analysis = self._basic_network_analysis(posts, comments)
+            
+            # Get active subreddits analysis
+            subreddit_activity = {}
+            for post in posts:
+                subreddit = post.get('subreddit')
+                if subreddit:
+                    if subreddit not in subreddit_activity:
+                        subreddit_activity[subreddit] = {'posts': 0, 'comments': 0, 'total_score': 0}
+                    subreddit_activity[subreddit]['posts'] += 1
+                    subreddit_activity[subreddit]['total_score'] += post.get('score', 0)
+            
+            for comment in comments:
+                subreddit = comment.get('subreddit')
+                if subreddit:
+                    if subreddit not in subreddit_activity:
+                        subreddit_activity[subreddit] = {'posts': 0, 'comments': 0, 'total_score': 0}
+                    subreddit_activity[subreddit]['comments'] += 1
+                    subreddit_activity[subreddit]['total_score'] += comment.get('score', 0)
+            
+            # Sort subreddits by activity level
+            active_subreddits = sorted(
+                subreddit_activity.items(),
+                key=lambda x: x[1]['posts'] + x[1]['comments'],
+                reverse=True
+            )
+            
+            # Get comment samples (top scoring and recent)
+            sorted_comments = sorted(comments, key=lambda x: x.get('score', 0), reverse=True)
+            top_comments = sorted_comments[:10]  # Top 10 by score
+            recent_comments = sorted(comments, key=lambda x: x.get('created_utc', 0), reverse=True)[:10]
+            
+            return {
+                'success': True,
+                'username': username,
+                'analysis_timestamp': time.time(),
+                'user_info': user_info,
+                'active_subreddits': [
+                    {
+                        'subreddit': name,
+                        'posts_count': data['posts'],
+                        'comments_count': data['comments'],
+                        'total_activity': data['posts'] + data['comments'],
+                        'total_score': data['total_score'],
+                        'average_score': data['total_score'] / max(data['posts'] + data['comments'], 1)
+                    }
+                    for name, data in active_subreddits[:20]  # Top 20 most active subreddits
+                ],
+                'comment_samples': {
+                    'top_scoring': top_comments,
+                    'recent': recent_comments
+                },
+                'posting_patterns': posting_patterns,
+                'engagement_metrics': engagement_metrics,
+                'content_analysis': content_analysis,
+                'network_analysis': network_analysis,
+                'raw_data_counts': {
+                    'total_posts_analyzed': len(posts),
+                    'total_comments_analyzed': len(comments),
+                    'unique_subreddits': len(subreddit_activity)
+                }
+            }
+            
+        except Exception as e:
+            if isinstance(e, RedditAPIError):
+                raise
+            return {
+                'success': False,
+                'username': username,
+                'analysis_timestamp': time.time(),
+                'error': str(e),
+                'user_info': None,
+                'active_subreddits': [],
+                'comment_samples': {'top_scoring': [], 'recent': []},
+                'posting_patterns': {},
+                'engagement_metrics': {},
+                'content_analysis': {},
+                'network_analysis': {},
+                'raw_data_counts': {'total_posts_analyzed': 0, 'total_comments_analyzed': 0, 'unique_subreddits': 0}
+            }
+    
+    def _basic_posting_patterns_analysis(self, posts: list, comments: list) -> Dict[str, Any]:
+        """Basic fallback analysis for posting patterns"""
+        if not posts and not comments:
+            return {'error': 'No data to analyze'}
+        
+        # Basic time analysis
+        all_timestamps = []
+        for post in posts:
+            if post.get('created_utc'):
+                all_timestamps.append(post['created_utc'])
+        for comment in comments:
+            if comment.get('created_utc'):
+                all_timestamps.append(comment['created_utc'])
+        
+        if not all_timestamps:
+            return {'error': 'No timestamps available'}
+        
+        # Calculate basic patterns
+        from datetime import datetime
+        hours = [datetime.fromtimestamp(ts).hour for ts in all_timestamps]
+        hour_counts = {}
+        for hour in hours:
+            hour_counts[hour] = hour_counts.get(hour, 0) + 1
+        
+        peak_hour = max(hour_counts.items(), key=lambda x: x[1])[0] if hour_counts else 0
+        
+        return {
+            'total_posts': len(posts),
+            'total_comments': len(comments),
+            'peak_activity_hour': peak_hour,
+            'activity_distribution': hour_counts,
+            'analysis_type': 'basic_fallback'
+        }
+    
+    def _basic_engagement_metrics(self, posts: list, comments: list) -> Dict[str, Any]:
+        """Basic fallback analysis for engagement metrics"""
+        post_scores = [p.get('score', 0) for p in posts]
+        comment_scores = [c.get('score', 0) for c in comments]
+        
+        return {
+            'average_post_score': sum(post_scores) / len(post_scores) if post_scores else 0,
+            'average_comment_score': sum(comment_scores) / len(comment_scores) if comment_scores else 0,
+            'max_post_score': max(post_scores) if post_scores else 0,
+            'max_comment_score': max(comment_scores) if comment_scores else 0,
+            'total_karma_from_posts': sum(post_scores),
+            'total_karma_from_comments': sum(comment_scores),
+            'analysis_type': 'basic_fallback'
+        }
+    
+    def _basic_content_analysis(self, posts: list, comments: list) -> Dict[str, Any]:
+        """Basic fallback analysis for content"""
+        # Count content types
+        text_posts = sum(1 for p in posts if p.get('is_self'))
+        link_posts = sum(1 for p in posts if not p.get('is_self'))
+        video_posts = sum(1 for p in posts if p.get('is_video'))
+        
+        # Basic text analysis
+        total_post_text_length = sum(len(p.get('selftext', '') + p.get('title', '')) for p in posts)
+        total_comment_text_length = sum(len(c.get('body', '')) for c in comments)
+        
+        return {
+            'content_type_distribution': {
+                'text_posts': text_posts,
+                'link_posts': link_posts,
+                'video_posts': video_posts
+            },
+            'text_metrics': {
+                'average_post_length': total_post_text_length / len(posts) if posts else 0,
+                'average_comment_length': total_comment_text_length / len(comments) if comments else 0,
+                'total_text_length': total_post_text_length + total_comment_text_length
+            },
+            'analysis_type': 'basic_fallback'
+        }
+    
+    def _basic_network_analysis(self, posts: list, comments: list) -> Dict[str, Any]:
+        """Basic fallback analysis for network connections"""
+        # Count subreddit interactions
+        subreddit_interactions = {}
+        for post in posts:
+            subreddit = post.get('subreddit')
+            if subreddit:
+                subreddit_interactions[subreddit] = subreddit_interactions.get(subreddit, 0) + 1
+        
+        for comment in comments:
+            subreddit = comment.get('subreddit')
+            if subreddit:
+                subreddit_interactions[subreddit] = subreddit_interactions.get(subreddit, 0) + 1
+        
+        # Sort by interaction count
+        top_subreddits = sorted(subreddit_interactions.items(), key=lambda x: x[1], reverse=True)[:10]
+        
+        return {
+            'top_interacted_subreddits': [{'subreddit': name, 'interactions': count} for name, count in top_subreddits],
+            'total_unique_subreddits': len(subreddit_interactions),
+            'analysis_type': 'basic_fallback'
+        }
+    

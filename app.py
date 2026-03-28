@@ -110,6 +110,11 @@ class FullSubredditPostsRequest(BaseModel):
     sort_by_attractiveness: bool = Field(default=True, description="Whether to sort results by attractiveness score")
     credentials: RedditCredentials
 
+class UserProfileResearchRequest(BaseModel):
+    username: str = Field(..., description="Reddit username (without u/ prefix)")
+    limit: int = Field(default=100, ge=1, le=1000, description="Maximum number of posts/comments to analyze (1-1000)")
+    credentials: RedditCredentials
+
 # Response models
 class UserResponse(BaseModel):
     name: Optional[str]
@@ -303,6 +308,20 @@ class FullSubredditPostsResponse(BaseModel):
     analysis_timestamp: float
     error: Optional[str] = None
 
+class UserProfileResearchResponse(BaseModel):
+    success: bool
+    username: str
+    analysis_timestamp: float
+    user_info: Optional[Dict[str, Any]] = None
+    active_subreddits: list[Dict[str, Any]]
+    comment_samples: Dict[str, list[Dict[str, Any]]]
+    posting_patterns: Dict[str, Any]
+    engagement_metrics: Dict[str, Any]
+    content_analysis: Dict[str, Any]
+    network_analysis: Dict[str, Any]
+    raw_data_counts: Dict[str, Any]
+    error: Optional[str] = None
+
 # Authentication dependency for API endpoints
 def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(bearer_security)):
     """
@@ -369,7 +388,8 @@ async def root():
             "get_subreddit_posts": "/get-subreddit-posts",
             "get_post_comments": "/get-post-comments",
             "get_formatted_post_analysis": "/get-formatted-post-analysis",
-            "get_full_subreddit_posts": "/get-full-subreddit-posts"
+            "get_full_subreddit_posts": "/get-full-subreddit-posts",
+            "get_user_profile_research": "/get-user-profile-research"
         },
         "docs": "/docs"
     }
@@ -639,6 +659,49 @@ async def get_formatted_post_analysis(request: FormattedPostAnalysisRequest, aut
         )
         
         return FormattedPostAnalysisResponse(**analysis_data)
+    
+    except RedditAPIError as e:
+        raise HTTPException(status_code=400, detail=f"Reddit API Error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+# User profile research endpoint
+@app.post("/get-user-profile-research", response_model=UserProfileResearchResponse)
+async def get_user_profile_research(request: UserProfileResearchRequest, authenticated: bool = Depends(verify_api_key)):
+    """
+    Get comprehensive profile research data for a Reddit user
+    
+    - **username**: Reddit username (without u/ prefix)
+    - **limit**: Maximum number of posts/comments to analyze (1-1000, default 100)
+    - **credentials**: Reddit app credentials
+    
+    Returns comprehensive analysis including:
+    - User basic information and statistics
+    - Active subreddits with engagement metrics
+    - Comment samples (top-scoring and recent)
+    - Posting patterns (frequency, timing, content types)
+    - Engagement metrics (scores, ratios, karma distribution)
+    - Content analysis (topics, vocabulary, writing style)
+    - Network analysis (subreddit interactions, community patterns)
+    
+    Requires API key authentication via Authorization header:
+    Authorization: Bearer {api_key}
+    """
+    try:
+        # Create Reddit client
+        client = RedditClient(
+            client_id=request.credentials.client_id,
+            client_secret=request.credentials.client_secret,
+            user_agent=request.credentials.user_agent
+        )
+        
+        # Get user profile research data
+        research_data = client.get_user_profile_research(
+            username=request.username,
+            limit=request.limit
+        )
+        
+        return UserProfileResearchResponse(**research_data)
     
     except RedditAPIError as e:
         raise HTTPException(status_code=400, detail=f"Reddit API Error: {str(e)}")

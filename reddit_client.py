@@ -178,6 +178,7 @@ class RedditClient:
                 'id': post_data.get('id'),
                 'title': post_data.get('title'),
                 'author': post_data.get('author'),
+                'author_fullname': post_data.get('author_fullname'),
                 'subreddit': post_data.get('subreddit'),
                 'score': score,
                 'upvote_ratio': upvote_ratio,
@@ -378,6 +379,7 @@ class RedditClient:
                     'id': post_data.get('id'),
                     'title': post_data.get('title'),
                     'author': post_data.get('author'),
+                    'author_fullname': post_data.get('author_fullname'),
                     'subreddit': post_data.get('subreddit'),
                     'score': score,
                     'upvote_ratio': upvote_ratio,
@@ -615,6 +617,7 @@ class RedditClient:
                 'id': post_data.get('id'),
                 'title': post_data.get('title'),
                 'author': post_data.get('author'),
+                'author_fullname': post_data.get('author_fullname'),
                 'subreddit': post_data.get('subreddit'),
                 'score': post_data.get('score'),
                 'num_comments': post_data.get('num_comments'),
@@ -801,6 +804,7 @@ class RedditClient:
                             simplified_post_data = {
                                 'title': analysis['post_data'].get('title', ''),
                                 'author': analysis['post_data'].get('author', ''),
+                                'author_fullname': analysis['post_data'].get('author_fullname'),
                                 'score': analysis['post_data'].get('score', 0),
                                 'upvote_ratio': analysis['post_data'].get('upvote_ratio', 0),
                                 'num_comments': analysis['post_data'].get('num_comments', 0),
@@ -827,6 +831,7 @@ class RedditClient:
                             simplified_post_data = {
                                 'title': post.get('title', ''),
                                 'author': post.get('author', ''),
+                                'author_fullname': post.get('author_fullname'),
                                 'score': post.get('score', 0),
                                 'upvote_ratio': post.get('upvote_ratio', 0),
                                 'num_comments': post.get('num_comments', 0),
@@ -870,6 +875,7 @@ class RedditClient:
                         simplified_post_data = {
                             'title': post.get('title', ''),
                             'author': post.get('author', ''),
+                            'author_fullname': post.get('author_fullname'),
                             'score': post.get('score', 0),
                             'upvote_ratio': post.get('upvote_ratio', 0),
                             'num_comments': post.get('num_comments', 0),
@@ -881,7 +887,7 @@ class RedditClient:
                             'media': post.get('media'),
                             'preview': post.get('preview')
                         }
-                        
+
                         analyzed_posts.append({
                             'post_data': simplified_post_data,
                             'attractiveness_analysis': attractiveness_analysis,

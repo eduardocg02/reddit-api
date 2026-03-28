@@ -138,6 +138,7 @@ class PostResponse(BaseModel):
     id: Optional[str]
     title: Optional[str]
     author: Optional[str]
+    author_fullname: Optional[str] = None
     subreddit: Optional[str]
     score: Optional[int]
     upvote_ratio: Optional[float]
@@ -186,6 +187,7 @@ class PostInfo(BaseModel):
     id: Optional[str]
     title: Optional[str]
     author: Optional[str]
+    author_fullname: Optional[str] = None
     subreddit: Optional[str]
     score: Optional[int]
     upvote_ratio: Optional[float]
@@ -260,6 +262,7 @@ class PostBasicInfo(BaseModel):
     id: Optional[str]
     title: Optional[str]
     author: Optional[str]
+    author_fullname: Optional[str] = None
     subreddit: Optional[str]
     score: Optional[int]
     num_comments: Optional[int]
